@@ -1,0 +1,21 @@
+# Node
+node_modules/
+npm-debug.log*
+
+# Build
+dist/
+build/
+
+# Env
+.env
+
+# Docker
+docker-compose.override.yml
+
+# Editor
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
