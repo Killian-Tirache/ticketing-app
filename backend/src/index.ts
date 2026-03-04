@@ -63,3 +63,11 @@ if (process.env.NODE_ENV !== "test") {
       process.exit(1);
     });
 }
+
+if (process.env.NODE_ENV === "production") {
+  setInterval(() => {
+    fetch(`${process.env.RENDER_EXTERNAL_URL}/health`).catch(() => {});
+  }, 14 * 60 * 1000);
+}
+
+app.get("/health", (_, res) => res.json({ status: "ok" }));
