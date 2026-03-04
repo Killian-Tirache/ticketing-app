@@ -1,18 +1,29 @@
 # Node
 node_modules/
+**/node_modules/
 npm-debug.log*
+*.log
 
 # Build
 dist/
 build/
 
 # Env
+env/
 .env
+.env.*
+!.env.*.example
+!.env.example
+
+# Coverage
+coverage/
+**/coverage/
 
 # Docker
+*.pid
 docker-compose.override.yml
 
-# Editor
+# IDE
 .vscode/
 .idea/
 
