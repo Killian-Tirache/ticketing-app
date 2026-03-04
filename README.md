@@ -6,8 +6,8 @@ Application fullstack de gestion de tickets de support avec chat temps réel, ge
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-blue)
 ![React](https://img.shields.io/badge/React-19-61DAFB)
 ![Docker](https://img.shields.io/badge/Docker-Compose-2496ED)
-![Tests](https://img.shields.io/badge/Tests-94%20passing-brightgreen)
-![Coverage](https://img.shields.io/badge/Coverage-89%25-brightgreen)
+![Tests](https://img.shields.io/badge/Tests-147%20passing-brightgreen)
+![Coverage](https://img.shields.io/badge/Coverage-85+%25-brightgreen)
 
 ## ✨ Fonctionnalités
 
