@@ -19,7 +19,7 @@ const sendTokenResponse = (userId: string, role: string, res: Response) => {
   const cookieOptions = {
     httpOnly: true,
     secure: NODE_ENV === "production",
-    sameSite: "strict" as const,
+    sameSite: "none" as const,
     maxAge: 7 * 24 * 60 * 60 * 1000,
   };
 
