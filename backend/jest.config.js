@@ -25,6 +25,9 @@ module.exports = {
   ],
   coverageThreshold: {
     global: {
+      "ts-jest": {
+        tsconfig: "tsconfig.test.json"
+      },
       branches: 80,
       functions: 85,
       lines: 85,
