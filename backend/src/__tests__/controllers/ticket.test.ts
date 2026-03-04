@@ -17,6 +17,7 @@ import {
   createTestCompany,
   createTestTicket,
   createAuthenticatedAgent,
+  createAgentWithToken,
 } from "../helpers/testHelpers";
 import { Company } from "../../models/company.model";
 import { authMiddleware } from "../../middlewares/authMiddleware";
@@ -267,6 +268,80 @@ describe("Ticket Controller", () => {
     });
   });
 
+  describe("GET /tickets — advanced filters", () => {
+    it("should filter tickets by company for non-admin", async () => {
+      const company1 = await createTestCompany({ ticketPrefix: "FC1" });
+      const company2 = await createTestCompany({ ticketPrefix: "FC2" });
+      const user = await createTestUser({
+        role: "user",
+        companies: [company1._id],
+      });
+      const userAgent = createAgentWithToken(app, user);
+
+      await createTestTicket({ company: company1._id, createdBy: user._id });
+      await createTestTicket({ company: company2._id, createdBy: user._id });
+
+      const response = await userAgent.get(`/tickets?company=${company1._id}`);
+      expect(response.status).toBe(200);
+      expect(
+        response.body.data.every(
+          (t: any) => t.company._id === company1._id.toString(),
+        ),
+      ).toBe(true);
+    });
+
+    it("should search tickets by title", async () => {
+      const company = await createTestCompany({ ticketPrefix: "SCH" });
+      const admin = await createTestAdmin();
+      const adminAgent = createAgentWithToken(app, admin);
+
+      await createTestTicket({
+        company: company._id,
+        createdBy: admin._id,
+        title: "Unique search title XYZ",
+      });
+
+      const response = await adminAgent.get(
+        "/tickets?search=Unique+search+title",
+      );
+      expect(response.status).toBe(200);
+      expect(
+        response.body.data.some((t: any) => t.title.includes("Unique")),
+      ).toBe(true);
+    });
+
+    it("should search tickets by ticketRef prefix", async () => {
+      const company = await createTestCompany({ ticketPrefix: "REF" });
+      const admin = await createTestAdmin();
+      const agent = createAgentWithToken(app, admin);
+
+      await createTestTicket({
+        company: company._id,
+        createdBy: admin._id,
+        ticketNumber: 42,
+      });
+
+      const response = await agent.get("/tickets?search=REF-0042");
+      expect(response.status).toBe(200);
+    });
+
+    it("should filter by company as admin", async () => {
+      const response = await adminAgent.get(`/tickets?company=${company1._id}`);
+      expect(response.status).toBe(200);
+      expect(
+        response.body.data.every(
+          (t: any) => t.company._id === company1._id.toString(),
+        ),
+      ).toBe(true);
+    });
+
+    it("should ignore unauthorized company filter for non-admin", async () => {
+      const response = await user1Agent.get(`/tickets?company=${company2._id}`);
+      expect(response.status).toBe(200);
+      expect(response.body.data.length).toBe(0);
+    });
+  });
+
   describe("GET /ticket/:id", () => {
     it("should return ticket for authorized user", async () => {
       const ticket = await createTestTicket({
@@ -409,6 +484,29 @@ describe("Ticket Controller", () => {
       expect(response.status).toBe(404);
       expect(response.body.error).toContain("introuvable");
     });
+
+    it("should return 403 for user without company access", async () => {
+      const company1 = await createTestCompany({ ticketPrefix: "RF1" });
+      const company2 = await createTestCompany({ ticketPrefix: "RF2" });
+      const admin = await createTestAdmin();
+      const user = await createTestUser({
+        role: "user",
+        companies: [company2._id],
+      });
+      const userAgent = createAgentWithToken(app, user);
+
+      await createTestTicket({
+        company: company1._id,
+        createdBy: admin._id,
+        ticketNumber: 1,
+        year: new Date().getFullYear(),
+      });
+
+      const response = await userAgent.get(
+        `/ticket/ref/RF1-0001-${new Date().getFullYear()}`,
+      );
+      expect(response.status).toBe(403);
+    });
   });
 
   describe("PUT /ticket/:id", () => {
@@ -444,6 +542,95 @@ describe("Ticket Controller", () => {
         .send({ status: "closed" });
 
       expect(response.status).toBe(403);
+    });
+  });
+
+  describe("PUT /ticket/:id — assignedTo validation", () => {
+    it("should return 403 when support tries to assign to someone else", async () => {
+      const company = await createTestCompany({ ticketPrefix: "AST" });
+      const support = await createTestSupport([company._id]);
+      const otherSupport = await createTestSupport([company._id]);
+      const supportAgent = createAgentWithToken(app, support);
+      const ticket = await createTestTicket({
+        company: company._id,
+        createdBy: support._id,
+      });
+
+      const response = await supportAgent
+        .put(`/ticket/${ticket._id}`)
+        .send({ assignedTo: otherSupport._id.toString() });
+      expect(response.status).toBe(403);
+    });
+
+    it("should return 403 when admin assigns to user role", async () => {
+      const company = await createTestCompany({ ticketPrefix: "AU1" });
+      const admin = await createTestAdmin();
+      const adminAgent = createAgentWithToken(app, admin);
+      const user = await createTestUser({
+        role: "user",
+        companies: [company._id],
+      });
+      const ticket = await createTestTicket({
+        company: company._id,
+        createdBy: admin._id,
+      });
+
+      const response = await adminAgent
+        .put(`/ticket/${ticket._id}`)
+        .send({ assignedTo: user._id.toString() });
+      expect(response.status).toBe(403);
+    });
+
+    it("should return 403 when admin assigns support from different company", async () => {
+      const company1 = await createTestCompany({ ticketPrefix: "AU2" });
+      const company2 = await createTestCompany({ ticketPrefix: "AU3" });
+      const admin = await createTestAdmin();
+      const adminAgent = createAgentWithToken(app, admin);
+      const support = await createTestSupport([company2._id]); // support de company2
+      const ticket = await createTestTicket({
+        company: company1._id,
+        createdBy: admin._id,
+      });
+
+      const response = await adminAgent
+        .put(`/ticket/${ticket._id}`)
+        .send({ assignedTo: support._id.toString() });
+      expect(response.status).toBe(403);
+    });
+
+    it("should assign ticket when admin assigns valid support", async () => {
+      const company = await createTestCompany({ ticketPrefix: "AU4" });
+      const admin = await createTestAdmin();
+      const adminAgent = createAgentWithToken(app, admin);
+      const support = await createTestSupport([company._id]);
+      const ticket = await createTestTicket({
+        company: company._id,
+        createdBy: admin._id,
+      });
+
+      const response = await adminAgent
+        .put(`/ticket/${ticket._id}`)
+        .send({ assignedTo: support._id.toString() });
+      expect(response.status).toBe(200);
+      expect(response.body.data.assignedTo).toBeDefined();
+    });
+
+    it("should unassign ticket with null assignedTo", async () => {
+      const company = await createTestCompany({ ticketPrefix: "AU5" });
+      const admin = await createTestAdmin();
+      const adminAgent = createAgentWithToken(app, admin);
+      const support = await createTestSupport([company._id]);
+      const ticket = await createTestTicket({
+        company: company._id,
+        createdBy: admin._id,
+        assignedTo: support._id,
+      });
+
+      const response = await adminAgent
+        .put(`/ticket/${ticket._id}`)
+        .send({ assignedTo: null });
+      expect(response.status).toBe(200);
+      expect(response.body.data.assignedTo).toBeNull();
     });
   });
 

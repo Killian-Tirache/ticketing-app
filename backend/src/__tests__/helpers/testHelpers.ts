@@ -74,7 +74,9 @@ export const generateExpiredToken = (userId: string, role: string) => {
 };
 
 export const loginUser = async (app: any, email: string, password: string) => {
-  const response = await request(app).post("/login").send({ email, password });
+  const response = await request(app)
+    .post("/api/user/login")
+    .send({ email, password });
 
   if (response.status !== 200) {
     throw new Error(`Login failed: ${response.body.error}`);
@@ -87,18 +89,12 @@ export const loginUser = async (app: any, email: string, password: string) => {
 export const createAuthenticatedAgent = async (
   app: any,
   user: any,
-  password: string = "Test123!@#$%",
+  _password: string = "Test123!@#$%",
 ) => {
-  const agent = request.agent(app);
+  return createAgentWithToken(app, user);
+};
 
-  const response = await agent.post("/login").send({
-    email: user.email,
-    password,
-  });
-
-  if (response.status !== 200) {
-    throw new Error(`Login failed for ${user.email}: ${response.body.error}`);
-  }
-
-  return agent;
+export const createAgentWithToken = (app: any, user: any) => {
+  const token = generateToken(user._id.toString(), user.role);
+  return request.agent(app).set("Cookie", `token=${token}`);
 };

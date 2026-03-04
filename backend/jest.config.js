@@ -4,10 +4,16 @@ module.exports = {
   roots: ["<rootDir>/src"],
   testMatch: ["**/__tests__/**/*.test.ts"],
   setupFilesAfterEnv: ["<rootDir>/src/__tests__/setup.ts"],
+  setupFiles: ['./src/__tests__/helpers/setupEnv.ts'],
+  moduleNameMapper: {
+    '^.*/socket$': '<rootDir>/src/__tests__/__mocks__/socket.ts',
+  },
   collectCoverageFrom: [
     "src/**/*.ts",
+    "!src/__tests__/**",
     "!src/**/*.types.ts",
     "!src/index.ts",
+    '!src/socket.ts',
     "!src/**/*.d.ts",
     "!src/scripts/**",
     "!src/routes/**",
@@ -19,8 +25,8 @@ module.exports = {
   ],
   coverageThreshold: {
     global: {
-      branches: 65,
-      functions: 80,
+      branches: 80,
+      functions: 85,
       lines: 85,
       statements: 85,
     },
@@ -29,8 +35,8 @@ module.exports = {
   verbose: true,
   forceExit: false,
   clearMocks: true,
-  resetMocks: true,
-  restoreMocks: true,
+  resetMocks: false,
+  restoreMocks: false,
   detectOpenHandles: false,
   maxWorkers: 1,
 };

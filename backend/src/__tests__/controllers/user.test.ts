@@ -7,6 +7,7 @@ import {
   createUser,
   updateUser,
   deleteUser,
+  getAssignableUsers,
 } from "../../controllers/userController";
 import { login } from "../../controllers/authController";
 import { User } from "../../models/user.model";
@@ -23,6 +24,8 @@ import {
   createTestUser,
   createTestSupport,
   createAuthenticatedAgent,
+  createTestCompany,
+  createAgentWithToken,
 } from "../helpers/testHelpers";
 
 const app = express();
@@ -30,6 +33,7 @@ app.use(express.json());
 app.use(cookieParser());
 
 app.post("/login", login);
+app.get("/users/assignable", authMiddleware, getAssignableUsers);
 app.get("/users", authMiddleware, authorizeRolesMiddleware("admin"), getUsers);
 app.get(
   "/user/:id",
@@ -101,6 +105,51 @@ describe("User Controller", () => {
       expect(response.status).toBe(200);
       expect(response.body.data.every((u: any) => !u.isDeleted)).toBe(true);
     });
+
+    it("should filter users by role", async () => {
+      await createTestUser({ role: "support", email: "support1@test.com" });
+      await createTestUser({ role: "user", email: "user1@test.com" });
+
+      const response = await adminAgent.get("/users?role=support");
+      expect(response.status).toBe(200);
+      expect(response.body.data.every((u: any) => u.role === "support")).toBe(
+        true,
+      );
+    });
+
+    it("should filter users by company", async () => {
+      const company = await createTestCompany({ ticketPrefix: "FLT" });
+      await createTestUser({
+        role: "user",
+        email: "companyuser@test.com",
+        companies: [company._id],
+      });
+
+      const response = await adminAgent.get(`/users?companies=${company._id}`);
+      expect(response.status).toBe(200);
+      expect(response.body.data.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it("should search users by name", async () => {
+      await createTestUser({
+        firstName: "Alice",
+        lastName: "Martin",
+        email: "alice@test.com",
+      });
+
+      const response = await adminAgent.get("/users?search=Alice");
+      expect(response.status).toBe(200);
+      expect(response.body.data.some((u: any) => u.firstName === "Alice")).toBe(
+        true,
+      );
+    });
+
+    it("should paginate users", async () => {
+      const response = await adminAgent.get("/users?page=1&limit=2");
+      expect(response.status).toBe(200);
+      expect(response.body.data.length).toBeLessThanOrEqual(2);
+      expect(response.body.totalPages).toBeDefined();
+    });
   });
 
   describe("GET /user/:id", () => {
@@ -127,6 +176,44 @@ describe("User Controller", () => {
 
       const response = await supportAgent.get(`/user/${user._id}`);
 
+      expect(response.status).toBe(403);
+    });
+  });
+
+  describe("GET /users/assignable", () => {
+    it("should return assignable users for admin with companyId", async () => {
+      const company = await createTestCompany({ ticketPrefix: "ASN" });
+      const support = await createTestSupport([company._id]);
+
+      const response = await adminAgent.get(
+        `/users/assignable?companyId=${company._id}`,
+      );
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+      expect(Array.isArray(response.body.data)).toBe(true);
+    });
+
+    it("should return 400 for admin without companyId", async () => {
+      const response = await adminAgent.get("/users/assignable");
+      expect(response.status).toBe(400);
+    });
+
+    it("should return only self for support role", async () => {
+      const company = await createTestCompany({ ticketPrefix: "SUP" });
+      const support = await createTestSupport([company._id]);
+      const supportAgent = createAgentWithToken(app, support);
+
+      const response = await supportAgent.get("/users/assignable");
+      expect(response.status).toBe(200);
+      expect(response.body.data.length).toBe(1);
+      expect(response.body.data[0]._id).toBe(support._id.toString());
+    });
+
+    it("should return 403 for user role", async () => {
+      const user = await createTestUser({ role: "user" });
+      const userAgent = createAgentWithToken(app, user);
+
+      const response = await userAgent.get("/users/assignable");
       expect(response.status).toBe(403);
     });
   });

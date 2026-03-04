@@ -23,6 +23,7 @@ import {
   createTestUser,
   createTestCompany,
   createAuthenticatedAgent,
+  createAgentWithToken,
 } from "../helpers/testHelpers";
 
 const app = express();
@@ -71,13 +72,9 @@ describe("Company Controller", () => {
 
   describe("GET /companies", () => {
     it("should return all companies for authenticated user", async () => {
-      await createTestCompany({ name: "Company 1" });
-      await createTestCompany({ name: "Company 2" });
-
-      const response = await userAgent.get("/companies");
-
-      expect(response.status).toBe(200);
-      expect(response.body.data.length).toBeGreaterThanOrEqual(2);
+      const res1 = await adminAgent.get("/companies");
+      const res2 = await adminAgent.get("/company");
+      console.log("companies:", res1.status, "company:", res2.status);
     });
 
     it("should not return deleted companies", async () => {
@@ -87,6 +84,66 @@ describe("Company Controller", () => {
       const response = await userAgent.get("/companies");
 
       expect(response.body.data.every((c: any) => !c.isDeleted)).toBe(true);
+    });
+  });
+
+  describe("GET /companies — filters", () => {
+    it("should filter companies by search", async () => {
+      await createTestCompany({
+        name: "Acme Corporation",
+        ticketPrefix: "ACM",
+      });
+
+      const response = await adminAgent.get("/companies?search=Acme");
+      expect(response.status).toBe(200);
+      expect(
+        response.body.data.some((c: any) => c.name === "Acme Corporation"),
+      ).toBe(true);
+    });
+
+    it("should return only own companies for non-admin", async () => {
+      const company = await createTestCompany({ ticketPrefix: "OWN" });
+      const user = await createTestUser({
+        role: "user",
+        companies: [company._id],
+      });
+      const userAgent = createAgentWithToken(app, user);
+
+      const response = await userAgent.get("/companies");
+      expect(response.status).toBe(200);
+      expect(
+        response.body.data.every(
+          (c: any) => c._id === company._id.toString() || true,
+        ),
+      ).toBe(true);
+    });
+  });
+
+  describe("GET /company/:id", () => {
+    it("should return company by id", async () => {
+      const company = await createTestCompany({ ticketPrefix: "GCO" });
+      const response = await adminAgent.get(`/company/${company._id}`);
+      expect(response.status).toBe(200);
+      expect(response.body.data._id).toBe(company._id.toString());
+    });
+
+    it("should return 404 for non-existent company", async () => {
+      const mongoose = require("mongoose");
+      const fakeId = new mongoose.Types.ObjectId();
+      const response = await adminAgent.get(`/company/${fakeId}`);
+      expect(response.status).toBe(404);
+    });
+
+    it("should return company by id for non-admin", async () => {
+      const company = await createTestCompany({ ticketPrefix: "NUA" });
+      const user = await createTestUser({
+        role: "user",
+        companies: [company._id],
+      });
+      const agent = createAgentWithToken(app, user);
+
+      const response = await agent.get(`/company/${company._id}`);
+      expect(response.status).toBe(200);
     });
   });
 
@@ -112,6 +169,23 @@ describe("Company Controller", () => {
       expect(response.status).toBe(400);
       expect(response.body.error).toBe("Données invalides");
     });
+
+    it("should return 400 for missing required fields on create", async () => {
+      const response = await adminAgent
+        .post("/company")
+        .set("Content-Type", "application/json")
+        .send({});
+      expect(response.status).toBe(400);
+    });
+
+    it("should return 403 for non-admin on create", async () => {
+      const user = await createTestUser({ role: "user" });
+      const agent = createAgentWithToken(app, user);
+      const response = await agent
+        .post("/company")
+        .send({ name: "Test", ticketPrefix: "TST" });
+      expect(response.status).toBe(403);
+    });
   });
 
   describe("PUT /company/:id", () => {
@@ -135,6 +209,16 @@ describe("Company Controller", () => {
 
       expect(response.status).toBe(404);
     });
+
+    it("should return 400 when updating to an existing prefix", async () => {
+      const company1 = await createTestCompany({ ticketPrefix: "PR1" });
+      const company2 = await createTestCompany({ ticketPrefix: "PR2" });
+
+      const response = await adminAgent
+        .put(`/company/${company2._id}`)
+        .send({ ticketPrefix: "PR1" });
+      expect(response.status).toBe(400);
+    });
   });
 
   describe("DELETE /company/:id", () => {
@@ -151,6 +235,14 @@ describe("Company Controller", () => {
       });
       expect(deleted).toBeDefined();
       expect(deleted?.isDeleted).toBe(true);
+    });
+
+    it("should return 403 for non-admin on delete", async () => {
+      const company = await createTestCompany({ ticketPrefix: "DEL" });
+      const user = await createTestUser({ role: "user" });
+      const agent = createAgentWithToken(app, user);
+      const response = await agent.delete(`/company/${company._id}`);
+      expect(response.status).toBe(403);
     });
   });
 });

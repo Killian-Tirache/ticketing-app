@@ -137,5 +137,12 @@ describe("Auth Controller", () => {
       expect(response.status).toBe(401);
       expect(response.body.error).toMatch(/Token/);
     });
+
+    it("should return 401 with malformed token", async () => {
+      const response = await request(app)
+        .get("/me")
+        .set("Cookie", "token=not.a.valid.jwt.token");
+      expect(response.status).toBe(401);
+    });
   });
 });

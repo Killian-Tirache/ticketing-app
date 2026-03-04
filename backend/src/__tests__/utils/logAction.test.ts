@@ -1,7 +1,8 @@
 import { logAction } from "../../utils/logAction";
 import { Log } from "../../models/log.model";
-import { Types } from "mongoose";
+import mongoose, { Types } from "mongoose";
 import "../setup";
+import { createTestUser } from "../helpers/testHelpers";
 
 describe("logAction", () => {
   afterEach(async () => {
@@ -62,5 +63,22 @@ describe("logAction", () => {
     expect(logs).toHaveLength(1);
     expect(logs[0].success).toBe(false);
     expect(logs[0].action).toBe("error");
+  });
+
+  it("should skip log when action is missing", async () => {
+    const user = await createTestUser();
+    await expect(
+      logAction({ userId: new mongoose.Types.ObjectId(user._id) as any, action: "create" as const, entity: "User", success: true })
+    ).resolves.not.toThrow();
+  });
+
+  it("should handle DB error gracefully", async () => {
+    const Log = require("../../models/log.model").Log;
+    jest.spyOn(Log, "create").mockRejectedValueOnce(new Error("DB error"));
+
+    const user = await createTestUser();
+    await expect(
+      logAction({ userId: user._id as any, action: "create", entity: "User", success: true })
+    ).resolves.not.toThrow();
   });
 });

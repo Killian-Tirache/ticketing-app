@@ -29,7 +29,6 @@ REQUIRED_ENV_VARS.forEach((key) => {
 
 const app = express();
 const httpServer = createServer(app);
-initSocket(httpServer);
 const PORT = process.env.PORT;
 app.use(helmet());
 app.use(
@@ -47,15 +46,20 @@ routes.forEach((route) => app.use("/api", route));
 app.use(notFoundMiddleware);
 app.use(errorMiddleware);
 
-mongoose
-  .connect(process.env.MONGO_URI as string)
-  .then(() => {
-    console.log("MongoDB connected");
-    httpServer.listen(PORT, () => {
-      console.log(`Server listening on port ${PORT}`);
+export default app;
+
+if (process.env.NODE_ENV !== "test") {
+  initSocket(httpServer);
+  mongoose
+    .connect(process.env.MONGO_URI as string)
+    .then(() => {
+      console.log("MongoDB connected");
+      httpServer.listen(PORT, () => {
+        console.log(`Server listening on port ${PORT}`);
+      });
+    })
+    .catch((error) => {
+      console.error("MongoDB connection error:", error);
+      process.exit(1);
     });
-  })
-  .catch((error) => {
-    console.error("MongoDB connection error:", error);
-    process.exit(1);
-  });
+}
